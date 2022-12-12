@@ -67,7 +67,7 @@ void main() {
 
     // Lighting
     highp float nDotL = dot(normalize(v_normal), normalize(v_toLight));
-    nDotL = clamp(nDotL, 0.1, 1.0);
+    nDotL = clamp(nDotL, 0.2, 1.0);
     out_color.xyz *= nDotL;
 
     // Final color

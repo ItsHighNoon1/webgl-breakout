@@ -35,7 +35,7 @@ uniform sampler2D u_texture;
 
 void main() {
     highp float nDotL = dot(normalize(v_normal), normalize(v_toLight));
-    nDotL = clamp(nDotL, 0.0, 1.0);
+    nDotL = clamp(nDotL, 0.2, 1.0);
 
     highp vec4 out_color = texture(u_texture, v_texcoord);
     out_color.xyz *= 0.2 * nDotL;

@@ -178,8 +178,6 @@ function newTexture(url) {
         );
     
         gl.generateMipmap(gl.TEXTURE_2D);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     };
@@ -187,6 +185,33 @@ function newTexture(url) {
     image.src = url;
     
     return texture;
+}
+
+function newFramebuffer(width, height) {
+    let texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    const level = 0;
+    const internalFormat = gl.RGBA;
+    const border = 0;
+    const format = gl.RGBA;
+    const type = gl.UNSIGNED_BYTE;
+    const data = null;
+    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
+        width, height, border,
+        format, type, data);
+     
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+    let framebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, level);
+    
+    return {
+        texture: texture,
+        framebuffer: framebuffer,
+        width: width,
+        height: height,
+    };
 }
 
 function setShaderParam(uniform, value) {
@@ -197,11 +222,17 @@ function setShaderParam(uniform, value) {
         case 5126: // float
             gl.uniform1f(uniform.location, value);
             return;
+        case 35664: // vec2
+            gl.uniform2f(uniform.location, value[0], value[1]);
+            return;
         case 35665: // vec3
             gl.uniform3f(uniform.location, value[0], value[1], value[2]);
             return;
         case 35676: // mat4
             gl.uniformMatrix4fv(uniform.location, false, value);
+            return;
+        case 35678: // sampler2D
+            gl.uniform1i(uniform.location, value);
             return;
         default:
             console.log("Unknown uniform type " + uniform.type + " for " + uniform.name);
@@ -221,8 +252,30 @@ function draw(model) {
     gl.drawElements(gl.TRIANGLES, model.vertices, gl.UNSIGNED_SHORT, 0);
 }
 
-function setTexture(texture) {
+function setTexture(texture, unit) {
+    if (unit === undefined) unit = 0;
+    switch (unit) {
+        case 0:
+            gl.activeTexture(gl.TEXTURE0);
+            break;
+        case 1:
+            gl.activeTexture(gl.TEXTURE1);
+            break;
+        case 2:
+            gl.activeTexture(gl.TEXTURE2);
+            break;
+    }
     gl.bindTexture(gl.TEXTURE_2D, texture);
+}
+
+function bindFramebuffer(framebuffer) {
+    if (framebuffer != null) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer.framebuffer);
+        gl.viewport(0, 0, framebuffer.width, framebuffer.height);
+    } else {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, screenWidth, screenHeight);
+    }
 }
 
 } // Namespace

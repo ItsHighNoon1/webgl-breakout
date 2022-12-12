@@ -13,7 +13,8 @@ let camera = {
     fov: 1.5,
     zNear: 0.1,
     zFar: 10.0,
-}
+};
+let framebuffer;
 
 // Time parameters
 let t = 0.0;
@@ -24,8 +25,8 @@ let keysDown = {};
 
 // Game state
 let bricks = [];
-let paddle = {x: 0.0, y: -0.9, z: 9};
-let ball = {x: 0.0, y: -0.8, vx: 0.0, vy: 1.5};
+let paddle = {x: 0.0, y: -0.3, z: 9};
+let ball = {x: 0.0, y: -0.2, vx: 0.0, vy: 1.0};
 
 function loop() {
     // Calculate elapsed time
@@ -45,14 +46,6 @@ function loop() {
     } else if (keysDown["d"] && timeElapsed) {
         paddle.x += timeElapsed * 2.0;
     }
-
-    // Calculate view and projection matrices
-    let viewMatrix = mat4.create();
-    mat4.fromXRotation(viewMatrix, -camera.rx);
-    mat4.rotate(viewMatrix, viewMatrix, -camera.ry, [0.0, 1.0, 0.0]);
-    mat4.translate(viewMatrix, viewMatrix, [-camera.x, -camera.y, -camera.z]);
-    let projectionMatrix = mat4.create();
-    mat4.perspective(projectionMatrix, camera.fov, screenWidth / screenHeight, camera.zNear, camera.zFar);
 
     // Move the ball
     if (timeElapsed) {
@@ -110,6 +103,12 @@ function loop() {
     if (ball.y > 1.0 && ball.vy > 0.0) {
         ball.vy = -ball.vy;
     }
+    if (ball.y < -0.5) {
+        ball.x = 0.0;
+        ball.y = -0.2;
+        ball.vx = 0.0;
+        ball.vy = 1.0;
+    }
 
     // Collide with paddle
     if (ball.x - 0.05 < paddle.x + 0.15
@@ -117,31 +116,82 @@ function loop() {
     && ball.y - 0.05 < paddle.y + 0.025
     && ball.y + 0.05 > paddle.y - 0.025) {
         let angle = (ball.x - paddle.x) * 5.0;
-        ball.vx = Math.sin(angle) * 1.5;
-        ball.vy = Math.cos(angle) * 1.5;
+        ball.vx = Math.sin(angle);
+        ball.vy = Math.cos(angle);
     }
     
     // Clear the screen
     prepareGraphics();
 
+    // Calculate view and projection matrices
+    let viewMatrix = mat4.create();
+    mat4.fromScaling(viewMatrix, [1.0, 1.0, 1.0]);
+    mat4.rotate(viewMatrix, viewMatrix, -camera.rx, [1.0, 0.0, 0.0]);
+    mat4.rotate(viewMatrix, viewMatrix, -camera.ry, [0.0, 1.0, 0.0]);
+    mat4.translate(viewMatrix, viewMatrix, [-camera.x, 1.0 + camera.y, -camera.z]);
+    
+    let projectionMatrix = mat4.create();
+    mat4.perspective(projectionMatrix, camera.fov, screenWidth / screenHeight, camera.zNear, camera.zFar);
+
+    // Render water POV
+    bindFramebuffer(framebuffer);
+    renderAll(viewMatrix, projectionMatrix);
+
+    // Render water
+    mat4.fromXRotation(viewMatrix, -camera.rx);
+    mat4.rotate(viewMatrix, viewMatrix, -camera.ry, [0.0, 1.0, 0.0]);
+    mat4.translate(viewMatrix, viewMatrix, [-camera.x, -camera.y, -camera.z]);
+
+    bindFramebuffer(null);
+    setTexture(framebuffer.texture, 0);
+    setTexture(textures.waterDudv, 1);
+    setTexture(textures.waterNormal, 2);
+    startShader(shaders.waterShader);
+    setShaderParam(shaders.waterShader.uniforms.reflection, 0);
+    setShaderParam(shaders.waterShader.uniforms.dudv, 1);
+    //setShaderParam(shaders.waterShader.uniforms.normalMap, 2);
+
+    setShaderParam(shaders.waterShader.uniforms.viewMatrix, viewMatrix);
+    setShaderParam(shaders.waterShader.uniforms.projectionMatrix, projectionMatrix);
+    setShaderParam(shaders.waterShader.uniforms.scroll, [t, t * 1.7]);
+    {
+        let modelMatrix = mat4.create();
+        // Water quad
+        mat4.identity(modelMatrix);
+        mat4.translate(modelMatrix, modelMatrix, [0.0, -0.5, 0.0]);
+        mat4.scale(modelMatrix, modelMatrix, [2.0, 2.0, 2.0]);
+        setShaderParam(shaders.waterShader.uniforms.modelMatrix, modelMatrix);
+        draw(models.water);
+    }
+
+    // Render everything else
+    renderAll(viewMatrix, projectionMatrix);
+
+    // Loop
+    requestAnimationFrame(loop);
+}
+
+function renderAll(viewMatrix, projectionMatrix) {
     // Draw the walls
     setTexture(textures.stone);
     startShader(shaders.wallShader);
     setShaderParam(shaders.wallShader.uniforms.viewMatrix, viewMatrix);
     setShaderParam(shaders.wallShader.uniforms.projectionMatrix, projectionMatrix);
-    setShaderParam(shaders.wallShader.uniforms.lightPos, [ball.x, ball.y, paddle.z * 0.1 - 0.1]);
+    setShaderParam(shaders.wallShader.uniforms.lightPos, [ball.x, ball.y, paddle.z * 0.1 + 0.1]);
     {
         let modelMatrix = mat4.create();
         // Left
         mat4.identity(modelMatrix);
         mat4.translate(modelMatrix, modelMatrix, [-2.0, 0.0, 0.0]);
         mat4.rotate(modelMatrix, modelMatrix, Math.PI / 2.0, [0.0, 0.0, 1.0]);
+        mat4.scale(modelMatrix, modelMatrix, [2.0, 2.0, 2.0]);
         setShaderParam(shaders.wallShader.uniforms.modelMatrix, modelMatrix);
         draw(models.wall);
         // Right
         mat4.identity(modelMatrix);
         mat4.translate(modelMatrix, modelMatrix, [2.0, 0.0, 0.0]);
         mat4.rotate(modelMatrix, modelMatrix, -Math.PI / 2.0, [0.0, 0.0, 1.0]);
+        mat4.scale(modelMatrix, modelMatrix, [2.0, 2.0, 2.0]);
         setShaderParam(shaders.wallShader.uniforms.modelMatrix, modelMatrix);
         draw(models.wall);
         // Top
@@ -152,7 +202,7 @@ function loop() {
         draw(models.wall);
         // Back
         mat4.identity(modelMatrix);
-        mat4.translate(modelMatrix, modelMatrix, [0.0, 0.0, -1.0]);
+        mat4.translate(modelMatrix, modelMatrix, [0.0, 1.0, -1.0]);
         mat4.rotate(modelMatrix, modelMatrix, Math.PI, [0.0, 1.0, 0.0]);
         mat4.rotate(modelMatrix, modelMatrix, Math.PI / 2.0, [1.0, 0.0, 0.0]);
         mat4.scale(modelMatrix, modelMatrix, [2.0, 2.0, 2.0]);
@@ -165,7 +215,7 @@ function loop() {
     setShaderParam(shaders.brickShader.uniforms.paddleDepth, paddle.z);
     setShaderParam(shaders.brickShader.uniforms.viewMatrix, viewMatrix);
     setShaderParam(shaders.brickShader.uniforms.projectionMatrix, projectionMatrix);
-    setShaderParam(shaders.brickShader.uniforms.lightPos, [ball.x, ball.y, paddle.z * 0.1 - 0.1]);
+    setShaderParam(shaders.brickShader.uniforms.lightPos, [ball.x, ball.y, paddle.z * 0.1 + 0.1]);
     bricks.forEach(brick => {
         let modelMatrix = mat4.create();
         mat4.identity(modelMatrix);
@@ -204,9 +254,6 @@ function loop() {
     setShaderParam(shaders.ballShader.uniforms.viewMatrix, viewMatrix);
     setShaderParam(shaders.ballShader.uniforms.projectionMatrix, projectionMatrix);
     draw(models.ball);
-
-    // Loop
-    requestAnimationFrame(loop);
 }
 
 window.onload = function() {
@@ -216,7 +263,7 @@ window.onload = function() {
 
     // Create brick grid
     for (let i = 0; i <= 18; i++) {
-        for (let j = 4; j <= 18; j++) {
+        for (let j = 7; j <= 18; j++) {
             for (let k = 0; k < 10; k++) {
                 // Cut holes with perlin noise
                 if (noise.get(i * 0.15 * 2.0, j * 0.05 * 2.0, k * 0.1 * 2.0) > 0.45) {
@@ -233,17 +280,24 @@ window.onload = function() {
     shaders.brickShader = newShader(vBrickSource, fBrickSource);
     shaders.ballShader = newShader(vBallSource, fBallSource);
     shaders.wallShader = newShader(vWallSource, fWallSource);
+    shaders.waterShader = newShader(vWaterSource, fWaterSource);
 
     // Create model
     models.brick = newModel(meshes.cube, shaders.brickShader);
     models.ball = newModel(meshes.plane, shaders.ballShader);
     models.wall = newModel(meshes.plane, shaders.wallShader);
+    models.water = newModel(meshes.plane, shaders.waterShader);
 
     // Create textures
     textures.stone = newTexture("https://itshighnoon1.github.io/webgl-breakout/res/stone.png");
     textures.gold = newTexture("https://itshighnoon1.github.io/webgl-breakout/res/gold.png");
     textures.pick = newTexture("https://itshighnoon1.github.io/webgl-breakout/res/pick.png");
     textures.paddle = newTexture("https://itshighnoon1.github.io/webgl-breakout/res/paddle.png");
+    textures.waterDudv = newTexture("https://itshighnoon1.github.io/webgl-breakout/res/w_dudv.png");
+    textures.waterNormal = newTexture("https://itshighnoon1.github.io/webgl-breakout/res/w_normal.png");
+
+    // Create framebuffer
+    framebuffer = newFramebuffer(512, 512);
 
     requestAnimationFrame(loop);
 }
