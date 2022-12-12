@@ -3,10 +3,11 @@
 // Graphics parameters
 let models = {};
 let shaders = {};
+let textures = {};
 let camera = {
     x: 0.0,
     y: 0.0,
-    z: 2.0,
+    z: 2.1,
     rx: 0.0,
     ry: 0.0,
     fov: 1.5,
@@ -24,6 +25,7 @@ let keysDown = {};
 // Game state
 let bricks = [];
 let paddle = {x: 0.0, y: -0.9, z: 9};
+let ball = {x: 0.0, y: -0.8, vx: 0.0, vy: 1.5};
 
 function loop() {
     // Calculate elapsed time
@@ -33,13 +35,15 @@ function loop() {
     if (timeElapsed) {
         t += timeElapsed / 1000.0;
     }
+
     timeElapsed /= 1000.0;
+    if (timeElapsed > 1.0) timeElapsed = 1.0;
 
     // Move the paddle
-    if (keysDown["a"]) {
-        paddle.x -= timeElapsed;
-    } else if (keysDown["d"]) {
-        paddle.x += timeElapsed;
+    if (keysDown["a"] && timeElapsed) {
+        paddle.x -= timeElapsed * 2.0;
+    } else if (keysDown["d"] && timeElapsed) {
+        paddle.x += timeElapsed * 2.0;
     }
 
     // Calculate view and projection matrices
@@ -49,23 +53,136 @@ function loop() {
     mat4.translate(viewMatrix, viewMatrix, [-camera.x, -camera.y, -camera.z]);
     let projectionMatrix = mat4.create();
     mat4.perspective(projectionMatrix, camera.fov, screenWidth / screenHeight, camera.zNear, camera.zFar);
+
+    // Move the ball
+    if (timeElapsed) {
+        ball.x += ball.vx * timeElapsed;
+        ball.y += ball.vy * timeElapsed;
+    }
+
+    // Collide with bricks
+    for (let i = 0; i < bricks.length; i++) {
+        let brick = bricks[i];
+        if (brick.z != paddle.z) continue;
+
+        if (ball.x - 0.05 < brick.x + 0.07
+        && ball.x + 0.05 > brick.x - 0.07
+        && ball.y - 0.05 < brick.y + 0.02
+        && ball.y + 0.05 > brick.y - 0.02) {
+            let newVx = ball.vx;
+            let newVy = ball.vy;
+            let nearest = 0.1;
+            if (Math.abs(ball.x - (brick.x - 0.07)) < nearest) {
+                let nearest = Math.abs(ball.x - (brick.x - 0.07));
+                newVx = -ball.vx;
+                newVy = ball.vy;
+            }
+            if (Math.abs(ball.x - (brick.x + 0.07)) < nearest) {
+                let nearest = Math.abs(ball.x - (brick.x + 0.07));
+                newVx = -ball.vx;
+                newVy = ball.vy;
+            }
+            if (Math.abs(ball.y - (brick.y - 0.02)) < nearest) {
+                let nearest = Math.abs(ball.y - (brick.y - 0.02));
+                newVx = ball.vx;
+                newVy = -ball.vy;
+            }
+            if (Math.abs(ball.y - (brick.y + 0.02)) < nearest) {
+                let nearest = Math.abs(ball.y - (brick.y + 0.02));
+                newVx = ball.vx;
+                newVy = -ball.vy;
+            }
+            ball.vx = newVx;
+            ball.vy = newVy;
+
+            bricks.splice(i, 1);
+            break;
+        }
+    }
+
+    // Collide with walls
+    if (ball.x > 2.0 && ball.vx > 0.0) {
+        ball.vx = -ball.vx;
+    }
+    if (ball.x < -2.0 && ball.vx < 0.0) {
+        ball.vx = -ball.vx;
+    }
+    if (ball.y > 1.0 && ball.vy > 0.0) {
+        ball.vy = -ball.vy;
+    }
+
+    // Collide with paddle
+    if (ball.x - 0.05 < paddle.x + 0.15
+    && ball.x + 0.05 > paddle.x - 0.15
+    && ball.y - 0.05 < paddle.y + 0.025
+    && ball.y + 0.05 > paddle.y - 0.025) {
+        let angle = (ball.x - paddle.x) * 5.0;
+        ball.vx = Math.sin(angle) * 1.5;
+        ball.vy = Math.cos(angle) * 1.5;
+    }
     
+    // Clear the screen
+    prepareGraphics();
+
+    // Draw the walls
+    setTexture(textures.stone);
+    startShader(shaders.wallShader);
+    setShaderParam(shaders.wallShader.uniforms.viewMatrix, viewMatrix);
+    setShaderParam(shaders.wallShader.uniforms.projectionMatrix, projectionMatrix);
+    setShaderParam(shaders.wallShader.uniforms.lightPos, [ball.x, ball.y, paddle.z * 0.1 - 0.1]);
+    {
+        let modelMatrix = mat4.create();
+        // Left
+        mat4.identity(modelMatrix);
+        mat4.translate(modelMatrix, modelMatrix, [-2.0, 0.0, 0.0]);
+        mat4.rotate(modelMatrix, modelMatrix, Math.PI / 2.0, [0.0, 0.0, 1.0]);
+        setShaderParam(shaders.wallShader.uniforms.modelMatrix, modelMatrix);
+        draw(models.wall);
+        // Right
+        mat4.identity(modelMatrix);
+        mat4.translate(modelMatrix, modelMatrix, [2.0, 0.0, 0.0]);
+        mat4.rotate(modelMatrix, modelMatrix, -Math.PI / 2.0, [0.0, 0.0, 1.0]);
+        setShaderParam(shaders.wallShader.uniforms.modelMatrix, modelMatrix);
+        draw(models.wall);
+        // Top
+        mat4.identity(modelMatrix);
+        mat4.translate(modelMatrix, modelMatrix, [0.0, 1.0, 0.0]);
+        mat4.scale(modelMatrix, modelMatrix, [2.0, 2.0, 2.0]);
+        setShaderParam(shaders.wallShader.uniforms.modelMatrix, modelMatrix);
+        draw(models.wall);
+        // Back
+        mat4.identity(modelMatrix);
+        mat4.translate(modelMatrix, modelMatrix, [0.0, 0.0, -1.0]);
+        mat4.rotate(modelMatrix, modelMatrix, Math.PI, [0.0, 1.0, 0.0]);
+        mat4.rotate(modelMatrix, modelMatrix, Math.PI / 2.0, [1.0, 0.0, 0.0]);
+        mat4.scale(modelMatrix, modelMatrix, [2.0, 2.0, 2.0]);
+        setShaderParam(shaders.wallShader.uniforms.modelMatrix, modelMatrix);
+        draw(models.wall);
+    }
+
     // Draw the bricks
     startShader(shaders.brickShader);
     setShaderParam(shaders.brickShader.uniforms.paddleDepth, paddle.z);
     setShaderParam(shaders.brickShader.uniforms.viewMatrix, viewMatrix);
     setShaderParam(shaders.brickShader.uniforms.projectionMatrix, projectionMatrix);
+    setShaderParam(shaders.brickShader.uniforms.lightPos, [ball.x, ball.y, paddle.z * 0.1 - 0.1]);
     bricks.forEach(brick => {
         let modelMatrix = mat4.create();
         mat4.identity(modelMatrix);
         mat4.translate(modelMatrix, modelMatrix, [brick.x, brick.y, brick.z * 0.1]);
         mat4.scale(modelMatrix, modelMatrix, [0.14, 0.04, 0.09]);
+        if (brick.value) {
+            setTexture(textures.gold);
+        } else {
+            setTexture(textures.stone);
+        }
         setShaderParam(shaders.brickShader.uniforms.brickDepth, brick.z);
         setShaderParam(shaders.brickShader.uniforms.modelMatrix, modelMatrix);
         draw(models.brick);
     });
 
     // Draw the paddle
+    setTexture(textures.paddle);
     setShaderParam(shaders.brickShader.uniforms.brickDepth, paddle.z);
     let modelMatrix = mat4.create();
     mat4.identity(modelMatrix);
@@ -74,15 +191,27 @@ function loop() {
     setShaderParam(shaders.brickShader.uniforms.modelMatrix, modelMatrix);
     draw(models.brick);
 
+    // Draw the ball
+    setTexture(textures.pick);
+    startShader(shaders.ballShader);
+    modelMatrix = mat4.create();
+        mat4.identity(modelMatrix);
+        mat4.translate(modelMatrix, modelMatrix, [ball.x, ball.y, paddle.z * 0.1]);
+        mat4.rotate(modelMatrix, modelMatrix, Math.PI / 2.0, [1.0, 0.0, 0.0]);
+        mat4.rotate(modelMatrix, modelMatrix, t * -15.0, [0.0, 1.0, 0.0]);
+        mat4.scale(modelMatrix, modelMatrix, [0.05, 0.05, 0.05]);
+    setShaderParam(shaders.ballShader.uniforms.modelMatrix, modelMatrix);
+    setShaderParam(shaders.ballShader.uniforms.viewMatrix, viewMatrix);
+    setShaderParam(shaders.ballShader.uniforms.projectionMatrix, projectionMatrix);
+    draw(models.ball);
+
     // Loop
     requestAnimationFrame(loop);
 }
 
 window.onload = function() {
     // Initialize noise
-    //const noise = new perlinNoise3d();
     const noise = new Noise();
-    console.log(noise);
     noise.noiseSeed(Date.now());
 
     // Create brick grid
@@ -91,7 +220,7 @@ window.onload = function() {
             for (let k = 0; k < 10; k++) {
                 // Cut holes with perlin noise
                 if (noise.get(i * 0.15 * 2.0, j * 0.05 * 2.0, k * 0.1 * 2.0) > 0.45) {
-                    bricks.push({x: (i - 9) * 0.15, y: j * 0.05, z: k});
+                    bricks.push({x: (i - 9) * 0.15, y: j * 0.05, z: k, value: noise.get(i * 0.15 * 2.0, j * 0.05 * 2.0, k * 0.1 * 2.0) > 0.7});
                 }
             }
         }
@@ -102,9 +231,19 @@ window.onload = function() {
 
     // Create shaders
     shaders.brickShader = newShader(vBrickSource, fBrickSource);
+    shaders.ballShader = newShader(vBallSource, fBallSource);
+    shaders.wallShader = newShader(vWallSource, fWallSource);
 
     // Create model
     models.brick = newModel(meshes.cube, shaders.brickShader);
+    models.ball = newModel(meshes.plane, shaders.ballShader);
+    models.wall = newModel(meshes.plane, shaders.wallShader);
+
+    // Create textures
+    textures.stone = newTexture("https://itshighnoon1.github.io/webgl-breakout/res/stone.png");
+    textures.gold = newTexture("https://itshighnoon1.github.io/webgl-breakout/res/gold.png");
+    textures.pick = newTexture("https://itshighnoon1.github.io/webgl-breakout/res/pick.png");
+    textures.paddle = newTexture("https://itshighnoon1.github.io/webgl-breakout/res/paddle.png");
 
     requestAnimationFrame(loop);
 }

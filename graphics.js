@@ -3,6 +3,7 @@ let screenHeight;
 
 let meshes = {
     cube: {"position":[-1,1,-1,1,1,1,1,1,-1,1,1,1,-1,-1,1,1,-1,1,-1,1,1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,1,-1,-1,-1,1,1,-1,1,-1,1,1,-1,-1,-1,1,-1,1,-1,-1,-1,-1,-1,-1,1,1,-1,1,1,-1,1,-1,1,-1,1,1,1,1,1,1,-1],"texcoord":[0.875,0.5,0.625,0.75,0.625,0.5,0.625,0.75,0.375,1,0.375,0.75,0.625,0,0.375,0.25,0.375,0,0.375,0.5,0.125,0.75,0.125,0.5,0.625,0.5,0.375,0.75,0.375,0.5,0.625,0.25,0.375,0.5,0.375,0.25,0.875,0.75,0.625,1,0.625,0.25,0.375,0.75,0.625,0.75,0.625,0.5],"normal":[0,1,0,0,1,0,0,1,0,0,0,1,0,0,1,0,0,1,-1,0,0,-1,0,0,-1,0,0,0,-1,0,0,-1,0,0,-1,0,1,0,0,1,0,0,1,0,0,0,0,-1,0,0,-1,0,0,-1,0,1,0,0,0,1,-1,0,0,0,-1,0,1,0,0,0,0,-1],"indices":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,0,18,1,3,19,4,6,20,7,9,21,10,12,22,13,15,23,16]},
+    plane: {"position":[-1,0,-1,1,0,1,-1,0,1,1,0,-1],"texcoord":[1,0,0,1,0,0,1,1],"normal":[0,-1,0,0,-1,0,0,-1,0,0,-1,0],"indices":[0,1,2,0,3,1]},
 }
 
 { // Namespace hack
@@ -13,6 +14,7 @@ function initGL() {
     let canvas = document.getElementById("frame");
     gl = canvas.getContext("webgl2");
     gl.enable(gl.DEPTH_TEST);
+    gl.clearColor(0.1, 0.1, 0.1, 1.0);
 
     resizeCanvas();
 }
@@ -140,6 +142,53 @@ function newShader(vertexSource, fragmentSource) {
     return shader;
 }
 
+function newTexture(url) {
+    let texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    const level = 0;
+    const internalFormat = gl.RGBA;
+    const width = 1;
+    const height = 1;
+    const border = 0;
+    const srcFormat = gl.RGBA;
+    const srcType = gl.UNSIGNED_BYTE;
+    const pixel = new Uint8Array([128, 128, 128, 255]);
+    gl.texImage2D(
+        gl.TEXTURE_2D,
+        level,
+        internalFormat,
+        width,
+        height,
+        border,
+        srcFormat,
+        srcType,
+        pixel
+    );
+
+    let image = new Image();
+    image.onload = () => {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          level,
+          internalFormat,
+          srcFormat,
+          srcType,
+          image
+        );
+    
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    };
+    image.crossOrigin = "anonymous"
+    image.src = url;
+    
+    return texture;
+}
+
 function setShaderParam(uniform, value) {
     switch (uniform.type) {
         case 5124: // int
@@ -147,6 +196,9 @@ function setShaderParam(uniform, value) {
             return;
         case 5126: // float
             gl.uniform1f(uniform.location, value);
+            return;
+        case 35665: // vec3
+            gl.uniform3f(uniform.location, value[0], value[1], value[2]);
             return;
         case 35676: // mat4
             gl.uniformMatrix4fv(uniform.location, false, value);
@@ -156,6 +208,10 @@ function setShaderParam(uniform, value) {
     }
 }
 
+function prepareGraphics() {
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+}
+
 function startShader(shader) {
     gl.useProgram(shader.program);
 }
@@ -163,6 +219,10 @@ function startShader(shader) {
 function draw(model) {
     gl.bindVertexArray(model.vao);
     gl.drawElements(gl.TRIANGLES, model.vertices, gl.UNSIGNED_SHORT, 0);
+}
+
+function setTexture(texture) {
+    gl.bindTexture(gl.TEXTURE_2D, texture);
 }
 
 } // Namespace
