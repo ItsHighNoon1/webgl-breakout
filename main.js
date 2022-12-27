@@ -29,6 +29,7 @@ let paddle = {x: 0.0, y: -0.3, z: 9};
 let ball = {x: 0.0, y: -0.2, vx: 0.0, vy: 1.0};
 
 function loop() {
+    console.log("A");
     // Calculate elapsed time
     let currTime = Date.now();
     let timeElapsed = currTime - lastTime;
@@ -38,7 +39,7 @@ function loop() {
     }
 
     timeElapsed /= 1000.0;
-    if (timeElapsed > 1.0) timeElapsed = 1.0;
+    if (timeElapsed > 0.5) timeElapsed = 0.0; // Sorry I'm cutting you off if you're running < 2 FPS
 
     // Move the paddle
     if (keysDown["a"] && timeElapsed) {
@@ -168,7 +169,9 @@ function loop() {
     renderAll(viewMatrix, projectionMatrix);
 
     // Loop
-    requestAnimationFrame(loop);
+    if (shouldRun()) {
+        requestAnimationFrame(loop);
+    }
 }
 
 function renderAll(viewMatrix, projectionMatrix) {
@@ -299,7 +302,9 @@ window.onload = function() {
     // Create framebuffer
     framebuffer = newFramebuffer(512, 512);
 
-    requestAnimationFrame(loop);
+    // On hover, resume
+    setOnHover(loop);
+    loop();
 }
 
 document.onkeydown = function(e) {

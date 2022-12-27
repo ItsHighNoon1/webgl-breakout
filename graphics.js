@@ -9,6 +9,15 @@ let meshes = {
 { // Namespace hack
 
 let gl;
+let canvas;
+
+function shouldRun() {
+    return canvas.matches(":hover");
+}
+
+function setOnHover(func) {
+    canvas.onmouseover = func;
+}
 
 function initGL() {
     let canvas = document.getElementById("frame");
@@ -20,7 +29,7 @@ function initGL() {
 }
 
 function resizeCanvas() {
-    let canvas = document.getElementById("frame");
+    canvas = document.getElementById("frame");
     if (canvas === null) return;
 
     // Resize the canvas
