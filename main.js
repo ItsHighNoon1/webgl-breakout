@@ -29,7 +29,6 @@ let paddle = {x: 0.0, y: -0.3, z: 9};
 let ball = {x: 0.0, y: -0.2, vx: 0.0, vy: 1.0};
 
 function loop() {
-    console.log("A");
     // Calculate elapsed time
     let currTime = Date.now();
     let timeElapsed = currTime - lastTime;
